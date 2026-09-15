@@ -4,11 +4,13 @@ import { Switch } from "@/components/ui/switch";
 import { trpc } from "@/lib/trpc";
 import { catalogCategoryLabels } from "@shared/catalogSeed";
 import {
+  Banknote,
   CheckCircle2,
   ChevronDown,
   CircleMinus,
   CirclePlus,
   ClipboardList,
+  CreditCard,
   Loader2,
   Menu,
   Minus,
@@ -19,6 +21,7 @@ import {
   Trash2,
   UtensilsCrossed,
   Wine,
+  QrCode,
   X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -32,11 +35,17 @@ type CartItem = {
   quantity: number;
 };
 
+type PaymentMethod = "dinheiro" | "pix" | "cartao";
+
 type CompletedOrder = {
   orderCode: string;
   customerName: string;
   tableNumber: string;
   serviceChargeEnabled: boolean;
+  paymentMethod: PaymentMethod;
+  needsChange: boolean;
+  cashReceivedCents: number | null;
+  changeCents: number | null;
   subtotalCents: number;
   serviceChargeCents: number;
   totalCents: number;
@@ -54,6 +63,9 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [serviceCharge, setServiceCharge] = useState(true);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix");
+  const [needsChange, setNeedsChange] = useState(false);
+  const [cashReceived, setCashReceived] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [tableNumber, setTableNumber] = useState("");
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -82,6 +94,8 @@ export default function Home() {
   const subtotal = cart.reduce((sum, item) => sum + item.priceCents * item.quantity, 0);
   const serviceFee = serviceCharge ? Math.round(subtotal * 0.1) : 0;
   const total = subtotal + serviceFee;
+  const cashReceivedCents = cashReceived.trim() ? Math.round(Number(cashReceived.replace(",", ".")) * 100) : null;
+  const changeCents = needsChange && cashReceivedCents != null ? cashReceivedCents - total : null;
 
   function addToCart(product: { id: number; name: string; priceCents: number }) {
     setCart(current => {
@@ -112,10 +126,16 @@ export default function Home() {
     if (!cart.length) return toast.error("Adicione produtos antes de finalizar.");
     if (!customerName.trim()) return toast.error("Informe o nome do cliente.");
     if (!tableNumber.trim()) return toast.error("Informe o número da mesa.");
+    if (paymentMethod === "dinheiro" && needsChange && (cashReceivedCents == null || cashReceivedCents < total)) {
+      return toast.error("Informe um valor em dinheiro igual ou maior que o total.");
+    }
 
     finalizeOrder.mutate({
       customerName,
       tableNumber,
+      paymentMethod,
+      needsChange,
+      cashReceivedCents: paymentMethod === "dinheiro" && needsChange ? cashReceivedCents : null,
       serviceChargeEnabled: serviceCharge,
       items: cart.map(item => ({ productId: item.productId, quantity: item.quantity })),
     });
@@ -126,6 +146,9 @@ export default function Home() {
     setCustomerName("");
     setTableNumber("");
     setServiceCharge(true);
+    setPaymentMethod("pix");
+    setNeedsChange(false);
+    setCashReceived("");
     setCart([]);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -184,6 +207,45 @@ export default function Home() {
           <Input value={customerName} onChange={event => setCustomerName(event.target.value)} placeholder="Nome do cliente" className="col-span-2 h-10 bg-card" />
           <Input value={tableNumber} onChange={event => setTableNumber(event.target.value)} placeholder="Nº da mesa" className="h-10 bg-card" />
           <div className="flex items-center rounded-md border border-border bg-card px-2.5 text-xs font-medium text-muted-foreground"><ClipboardList className="mr-1.5 h-3.5 w-3.5 text-primary" /> Atendimento na mesa</div>
+          <div className="col-span-2 mt-2">
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">Forma de pagamento</p>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                ["dinheiro", "Dinheiro", Banknote],
+                ["pix", "Pix", QrCode],
+                ["cartao", "Cartão", CreditCard],
+              ] as const).map(([method, label, Icon]) => (
+                <button
+                  key={method}
+                  type="button"
+                  onClick={() => {
+                    setPaymentMethod(method);
+                    if (method !== "dinheiro") {
+                      setNeedsChange(false);
+                      setCashReceived("");
+                    }
+                  }}
+                  className={`pressable flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg border px-2 py-2 text-xs font-bold transition ${paymentMethod === method ? "border-primary bg-primary text-primary-foreground shadow-sm" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}>
+                  <Icon className="h-4 w-4" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {paymentMethod === "dinheiro" && (
+            <div className="col-span-2 rounded-lg border border-[#e6c995] bg-[#fff8e9] p-3">
+              <label htmlFor="needs-change" className="flex cursor-pointer items-center justify-between gap-3 text-sm font-semibold text-foreground">
+                <span className="flex items-center gap-2"><Banknote className="h-4 w-4 text-primary" /> Precisa de troco?</span>
+                <Switch id="needs-change" checked={needsChange} onCheckedChange={setNeedsChange} />
+              </label>
+              {needsChange && (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <Input id="cash-received" type="number" min={total / 100} step="0.01" value={cashReceived} onChange={event => setCashReceived(event.target.value)} placeholder="Valor entregue (R$)" className="h-10 border-[#e6c995] bg-card" />
+                  <div className={`flex items-center justify-between rounded-md border px-2.5 text-xs font-bold ${changeCents != null && changeCents >= 0 ? "border-[#b6d4b0] bg-[#f3fbf0] text-[#356b37]" : "border-destructive/30 bg-red-50 text-destructive"}`}><span>Troco</span><span>{changeCents != null && changeCents >= 0 ? currency(changeCents) : "—"}</span></div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="mt-5 space-y-2.5 text-sm">
@@ -222,7 +284,7 @@ export default function Home() {
             <div className="py-6">
               {completedOrder.items.map(item => <div key={`${item.productName}-${item.quantity}`} className="mb-4 flex gap-4 last:mb-0"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-bold text-primary">{item.quantity}</span><div className="min-w-0 flex-1"><p className="font-semibold">{item.productName}</p><p className="text-xs text-muted-foreground">{currency(item.unitPriceCents)} por unidade</p></div><p className="font-semibold">{currency(item.totalCents)}</p></div>)}
             </div>
-            <div className="space-y-2 border-t border-dashed border-border pt-5 text-sm"><div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{currency(completedOrder.subtotalCents)}</span></div><div className="flex justify-between text-muted-foreground"><span>Serviço (10%) {completedOrder.serviceChargeEnabled ? "" : "— não incluído"}</span><span>{currency(completedOrder.serviceChargeCents)}</span></div><div className="mt-3 flex justify-between font-serif text-2xl font-bold"><span>Total</span><span className="text-primary">{currency(completedOrder.totalCents)}</span></div></div>
+            <div className="space-y-2 border-t border-dashed border-border pt-5 text-sm"><div className="flex justify-between text-muted-foreground"><span>Pagamento</span><span className="font-semibold text-foreground">{completedOrder.paymentMethod === "dinheiro" ? "Dinheiro" : completedOrder.paymentMethod === "pix" ? "Pix" : "Cartão"}</span></div>{completedOrder.paymentMethod === "dinheiro" && completedOrder.needsChange && <div className="flex justify-between text-muted-foreground"><span>Troco</span><span>{currency(completedOrder.changeCents ?? 0)}</span></div>}<div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{currency(completedOrder.subtotalCents)}</span></div><div className="flex justify-between text-muted-foreground"><span>Serviço (10%) {completedOrder.serviceChargeEnabled ? "" : "— não incluído"}</span><span>{currency(completedOrder.serviceChargeCents)}</span></div><div className="mt-3 flex justify-between font-serif text-2xl font-bold"><span>Total</span><span className="text-primary">{currency(completedOrder.totalCents)}</span></div></div>
             <Button onClick={startNewOrder} className="pressable mt-8 h-12 w-full bg-primary text-primary-foreground hover:bg-[#71301e]"><UtensilsCrossed className="mr-2 h-4 w-4" /> Fazer novo pedido</Button>
           </div>
         </section>

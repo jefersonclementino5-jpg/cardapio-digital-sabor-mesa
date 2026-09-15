@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { productCategoryValues } from "../drizzle/schema";
+import { paymentMethodValues, productCategoryValues } from "../drizzle/schema";
 import * as db from "./db";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -30,6 +30,9 @@ export const appRouter = router({
         z.object({
           customerName: z.string().trim().min(2, "Informe o nome do cliente.").max(120),
           tableNumber: z.string().trim().min(1, "Informe o número da mesa.").max(20),
+          paymentMethod: z.enum(paymentMethodValues),
+          needsChange: z.boolean(),
+          cashReceivedCents: z.number().int().positive().nullable().optional(),
           serviceChargeEnabled: z.boolean(),
           items: z
             .array(z.object({ productId: z.number().int().positive(), quantity: z.number().int().min(1).max(99) }))

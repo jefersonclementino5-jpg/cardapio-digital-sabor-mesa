@@ -5,12 +5,13 @@ import {
   type NewProduct,
   orderItems,
   orders,
+  paymentMethodValues,
   products,
   type Product,
   users,
 } from "../drizzle/schema";
 import { catalogSeed, type CatalogSeedItem } from "../shared/catalogSeed";
-import { calculateOrderTotals } from "./orderCalculations";
+import { calculateChangeCents, calculateOrderTotals } from "./orderCalculations";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -116,6 +117,7 @@ export async function getCatalogCounts() {
 }
 
 export type SubmittedOrderItem = { productId: number; quantity: number };
+export type PaymentMethod = (typeof paymentMethodValues)[number];
 
 /**
  * Builds totals from live MySQL prices, stores a completed order and immutable line snapshots.
@@ -124,6 +126,9 @@ export type SubmittedOrderItem = { productId: number; quantity: number };
 export async function createOrder(input: {
   customerName: string;
   tableNumber: string;
+  paymentMethod: PaymentMethod;
+  needsChange: boolean;
+  cashReceivedCents?: number | null;
   serviceChargeEnabled: boolean;
   items: SubmittedOrderItem[];
 }) {
@@ -160,6 +165,15 @@ export async function createOrder(input: {
     pricedLines.map(line => ({ unitPriceCents: line.product.priceCents, quantity: line.quantity })),
     input.serviceChargeEnabled,
   );
+  const isCashPayment = input.paymentMethod === "dinheiro";
+  const cashReceivedCents = isCashPayment && input.cashReceivedCents != null ? input.cashReceivedCents : null;
+  if (input.needsChange && !isCashPayment) {
+    throw new Error("A opção de troco está disponível somente para pagamentos em dinheiro.");
+  }
+  if (input.needsChange && (cashReceivedCents == null || cashReceivedCents < totals.totalCents)) {
+    throw new Error("Informe um valor em dinheiro igual ou maior que o total do pedido.");
+  }
+  const changeCents = calculateChangeCents(totals.totalCents, cashReceivedCents, input.needsChange);
   const orderCode = `SM-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
 
   return db.transaction(async tx => {
@@ -167,6 +181,10 @@ export async function createOrder(input: {
       orderCode,
       customerName: input.customerName.trim(),
       tableNumber: input.tableNumber.trim(),
+      paymentMethod: input.paymentMethod,
+      needsChange: input.needsChange,
+      cashReceivedCents,
+      changeCents,
       serviceChargeEnabled: input.serviceChargeEnabled,
       ...totals,
     });
@@ -188,6 +206,10 @@ export async function createOrder(input: {
       orderCode,
       customerName: input.customerName.trim(),
       tableNumber: input.tableNumber.trim(),
+      paymentMethod: input.paymentMethod,
+      needsChange: input.needsChange,
+      cashReceivedCents,
+      changeCents,
       serviceChargeEnabled: input.serviceChargeEnabled,
       ...totals,
       items: pricedLines.map(({ product, quantity }) => ({

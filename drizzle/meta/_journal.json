@@ -15,6 +15,13 @@
       "when": 1789480387646,
       "tag": "0001_huge_jocasta",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1789481113680,
+      "tag": "0002_breezy_harpoon",
+      "breakpoints": true
     }
   ]
 }

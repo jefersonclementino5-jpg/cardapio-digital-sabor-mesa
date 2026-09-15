@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateOrderTotals } from "./orderCalculations";
+import { calculateChangeCents, calculateOrderTotals } from "./orderCalculations";
 
 describe("calculateOrderTotals", () => {
   it("calcula subtotal, serviço opcional e total com precisão em centavos", () => {
@@ -20,5 +20,11 @@ describe("calculateOrderTotals", () => {
       serviceChargeCents: 0,
       totalCents: 20000,
     });
+  });
+
+  it("calcula o troco quando o cliente entrega dinheiro suficiente", () => {
+    expect(calculateChangeCents(1969, 5000, true)).toBe(3031);
+    expect(calculateChangeCents(1969, 1800, true)).toBeNull();
+    expect(calculateChangeCents(1969, null, false)).toBe(0);
   });
 });

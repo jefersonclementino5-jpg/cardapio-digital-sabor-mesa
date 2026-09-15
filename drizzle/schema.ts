@@ -47,6 +47,7 @@ export const products = mysqlTable(
 );
 
 export const orderStatusValues = ["finalizado", "cancelado"] as const;
+export const paymentMethodValues = ["dinheiro", "pix", "cartao"] as const;
 
 /** Cabeçalho do pedido finalizado pelo cliente. Valores são armazenados em centavos. */
 export const orders = mysqlTable(
@@ -56,6 +57,10 @@ export const orders = mysqlTable(
     orderCode: varchar("orderCode", { length: 24 }).notNull().unique(),
     customerName: varchar("customerName", { length: 120 }).notNull(),
     tableNumber: varchar("tableNumber", { length: 20 }).notNull(),
+    paymentMethod: mysqlEnum("paymentMethod", paymentMethodValues).notNull(),
+    needsChange: boolean("needsChange").default(false).notNull(),
+    cashReceivedCents: int("cashReceivedCents"),
+    changeCents: int("changeCents"),
     serviceChargeEnabled: boolean("serviceChargeEnabled").default(true).notNull(),
     subtotalCents: int("subtotalCents").notNull(),
     serviceChargeCents: int("serviceChargeCents").notNull(),

@@ -16,3 +16,13 @@ export function calculateOrderTotals(lines: PricedLine[], serviceChargeEnabled: 
     totalCents: subtotalCents + serviceChargeCents,
   };
 }
+
+export function calculateChangeCents(
+  totalCents: number,
+  cashReceivedCents: number | null,
+  needsChange: boolean,
+) {
+  if (!needsChange) return 0;
+  if (cashReceivedCents == null || cashReceivedCents < totalCents) return null;
+  return cashReceivedCents - totalCents;
+}
